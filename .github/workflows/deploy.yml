@@ -1,5 +1,10 @@
 # Promotion pipeline — slide 14 / demo Segment 4.
-# Auto-deploys to test; PAUSES on a manual approval before production.
+#
+# Build ONCE, promote the SAME immutable artifact: the managed solution is packed
+# a single time, checksummed, and uploaded. Test and Production both import that
+# exact artifact — only the deployment-settings differ. This is the immutability
+# principle the talk preaches (REVIEW-00: "the same immutable artifact should move
+# through all stages"). Production deployment pauses on a manual approval gate.
 name: deploy
 
 on:
@@ -10,13 +15,55 @@ permissions:
   contents: write   # to cut the release (the evidence on slide 12)
 
 jobs:
+  # ---- Build the immutable managed artifact exactly once -------------------
+  build-artifact:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      sha256: ${{ steps.meta.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/powerplatform-actions/actions-install@v1
+      - name: Pack managed solution (once)
+        run: |
+          mkdir -p out
+          pac solution pack --zipfile out/customer-onboarding_managed.zip \
+            --folder solutions/customer-onboarding --packagetype Managed
+      - name: Stamp provenance (version + checksum + manifest)
+        id: meta
+        run: |
+          VERSION=$(grep -oE '<Version>[^<]+' solutions/customer-onboarding/Other/Solution.xml | head -1 | sed 's/<Version>//')
+          SHA256=$(sha256sum out/customer-onboarding_managed.zip | cut -d' ' -f1)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA256"  >> "$GITHUB_OUTPUT"
+          cat > out/release-manifest.json <<EOF
+          {
+            "solution": "customer-onboarding",
+            "version": "$VERSION",
+            "artifact": "customer-onboarding_managed.zip",
+            "sha256": "$SHA256",
+            "commit": "${{ github.sha }}",
+            "built_by": "${{ github.actor }}",
+            "run_id": "${{ github.run_id }}"
+          }
+          EOF
+      - name: Publish the immutable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: managed-solution
+          path: out/
+
+  # ---- Deploy that exact artifact to TEST (auto) --------------------------
   deploy-to-test:
     runs-on: ubuntu-latest
+    needs: build-artifact
     environment: test
     steps:
       - uses: actions/checkout@v4
       - uses: microsoft/powerplatform-actions/actions-install@v1
-      - name: Pack + import into TEST
+      - uses: actions/download-artifact@v4
+        with: { name: managed-solution, path: out }
+      - name: Import the promoted artifact into TEST
         env:
           PP_TENANT_ID: ${{ secrets.PP_TENANT_ID }}
           PP_CLIENT_ID: ${{ secrets.PP_CLIENT_ID }}
@@ -24,10 +71,10 @@ jobs:
         run: |
           TEST_URL=$(echo '${{ vars.PP_ENV_URLS }}' | python3 -c "import sys,json;print(json.load(sys.stdin)['test'])")
           pac auth create --applicationId "$PP_CLIENT_ID" --clientSecret "$PP_CLIENT_SECRET" --tenant "$PP_TENANT_ID"
-          pac solution pack --zipfile out/sln.zip --folder solutions/customer-onboarding --packagetype Managed
-          pac solution import --path out/sln.zip --environment "$TEST_URL" \
+          pac solution import --path out/customer-onboarding_managed.zip --environment "$TEST_URL" \
             --settings-file deployment-settings/test.json --force-overwrite --publish-changes
 
+  # ---- Promote the SAME artifact to PRODUCTION (approval-gated) ------------
   deploy-to-production:
     runs-on: ubuntu-latest
     needs: deploy-to-test
@@ -35,7 +82,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: microsoft/powerplatform-actions/actions-install@v1
-      - name: Pack + import into PRODUCTION
+      - uses: actions/download-artifact@v4
+        with: { name: managed-solution, path: out }
+      - name: Import the SAME artifact into PRODUCTION
         env:
           PP_TENANT_ID: ${{ secrets.PP_TENANT_ID }}
           PP_CLIENT_ID: ${{ secrets.PP_CLIENT_ID }}
@@ -43,19 +92,29 @@ jobs:
         run: |
           PROD_URL=$(echo '${{ vars.PP_ENV_URLS }}' | python3 -c "import sys,json;print(json.load(sys.stdin)['prod'])")
           pac auth create --applicationId "$PP_CLIENT_ID" --clientSecret "$PP_CLIENT_SECRET" --tenant "$PP_TENANT_ID"
-          pac solution pack --zipfile out/sln.zip --folder solutions/customer-onboarding --packagetype Managed
-          pac solution import --path out/sln.zip --environment "$PROD_URL" \
+          pac solution import --path out/customer-onboarding_managed.zip --environment "$PROD_URL" \
             --settings-file deployment-settings/prod.json --force-overwrite --publish-changes
 
+  # ---- Record the deployment evidence (slide 12) --------------------------
   record-evidence:
     runs-on: ubuntu-latest
-    needs: deploy-to-production
+    needs: [build-artifact, deploy-to-production]
     steps:
       - uses: actions/checkout@v4
-      - name: Cut a release as the deployment record (slide 12)
-        env: { GH_TOKEN: ${{ github.token }} }
+      - uses: actions/download-artifact@v4
+        with: { name: managed-solution, path: out }
+      - name: Cut a release as the deployment record
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="deploy-$(date +%Y%m%d-%H%M%S)"
+          VER="${{ needs.build-artifact.outputs.version }}"
+          SHA256="${{ needs.build-artifact.outputs.sha256 }}"
+          TAG="v${VER}+${GITHUB_SHA::7}"
           gh release create "$TAG" \
-            --title "Production deploy $TAG" \
-            --notes "Auto-generated deployment record. Commit ${{ github.sha }}."
+            --title "Production deploy — customer-onboarding $VER" \
+            --notes "Immutable artifact promoted dev→test→prod.
+          - Version: \`$VER\`
+          - Artifact SHA-256: \`$SHA256\`
+          - Commit: \`${{ github.sha }}\`
+          - Approved + deployed via run ${{ github.run_id }}" \
+            out/customer-onboarding_managed.zip out/release-manifest.json

@@ -51,3 +51,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Assert every env var has a value per deployment-settings
         run: ./pipelines/checks/envvar_complete.sh
+
+  no-secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assert no hardcoded secrets or environment-specific URLs in source
+        run: ./pipelines/checks/no_secrets.sh
