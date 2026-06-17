@@ -1,0 +1,8 @@
+# Build output from pac solution pack
+out/
+*.zip
+checker-out/
+
+# Never commit tenant-specific connection ids or secrets
+*.secret
+.env

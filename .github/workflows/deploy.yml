@@ -1,0 +1,61 @@
+# Promotion pipeline — slide 14 / demo Segment 4.
+# Auto-deploys to test; PAUSES on a manual approval before production.
+name: deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write   # to cut the release (the evidence on slide 12)
+
+jobs:
+  deploy-to-test:
+    runs-on: ubuntu-latest
+    environment: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/powerplatform-actions/actions-install@v1
+      - name: Pack + import into TEST
+        env:
+          PP_TENANT_ID: ${{ secrets.PP_TENANT_ID }}
+          PP_CLIENT_ID: ${{ secrets.PP_CLIENT_ID }}
+          PP_CLIENT_SECRET: ${{ secrets.PP_CLIENT_SECRET }}
+        run: |
+          TEST_URL=$(echo '${{ vars.PP_ENV_URLS }}' | python3 -c "import sys,json;print(json.load(sys.stdin)['test'])")
+          pac auth create --applicationId "$PP_CLIENT_ID" --clientSecret "$PP_CLIENT_SECRET" --tenant "$PP_TENANT_ID"
+          pac solution pack --zipfile out/sln.zip --folder solutions/customer-onboarding --packagetype Managed
+          pac solution import --path out/sln.zip --environment "$TEST_URL" \
+            --settings-file deployment-settings/test.json --force-overwrite --publish-changes
+
+  deploy-to-production:
+    runs-on: ubuntu-latest
+    needs: deploy-to-test
+    environment: production   # <-- the manual approval gate lives on this environment
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/powerplatform-actions/actions-install@v1
+      - name: Pack + import into PRODUCTION
+        env:
+          PP_TENANT_ID: ${{ secrets.PP_TENANT_ID }}
+          PP_CLIENT_ID: ${{ secrets.PP_CLIENT_ID }}
+          PP_CLIENT_SECRET: ${{ secrets.PP_CLIENT_SECRET }}
+        run: |
+          PROD_URL=$(echo '${{ vars.PP_ENV_URLS }}' | python3 -c "import sys,json;print(json.load(sys.stdin)['prod'])")
+          pac auth create --applicationId "$PP_CLIENT_ID" --clientSecret "$PP_CLIENT_SECRET" --tenant "$PP_TENANT_ID"
+          pac solution pack --zipfile out/sln.zip --folder solutions/customer-onboarding --packagetype Managed
+          pac solution import --path out/sln.zip --environment "$PROD_URL" \
+            --settings-file deployment-settings/prod.json --force-overwrite --publish-changes
+
+  record-evidence:
+    runs-on: ubuntu-latest
+    needs: deploy-to-production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cut a release as the deployment record (slide 12)
+        env: { GH_TOKEN: ${{ github.token }} }
+        run: |
+          TAG="deploy-$(date +%Y%m%d-%H%M%S)"
+          gh release create "$TAG" \
+            --title "Production deploy $TAG" \
+            --notes "Auto-generated deployment record. Commit ${{ github.sha }}."

@@ -1,0 +1,8 @@
+{
+  "EnvironmentVariables": [
+    { "SchemaName": "onb_IntakeEndpoint", "Value": "https://new-endpoint.contoso.example/api/intake" }
+  ],
+  "ConnectionReferences": [
+    { "LogicalName": "onb_dataverse_ref", "ConnectionId": "", "ConnectorId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps" }
+  ]
+}

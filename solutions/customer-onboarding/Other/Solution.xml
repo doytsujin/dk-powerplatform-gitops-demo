@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ImportExportXml version="9.2">
+  <SolutionManifest>
+    <UniqueName>customeronboarding</UniqueName>
+    <LocalizedNames>
+      <LocalizedName description="Customer Onboarding" languagecode="1033" />
+    </LocalizedNames>
+    <Version>1.0.0.1</Version>
+    <Managed>0</Managed>
+  </SolutionManifest>
+</ImportExportXml>

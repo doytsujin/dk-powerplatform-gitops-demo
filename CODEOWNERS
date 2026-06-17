@@ -1,0 +1,6 @@
+# Makes the "platform owner" review on slide 10 a real, enforced gate.
+# Branch protection requires a code-owner approval on anything under solutions/.
+# TODO: replace with your GitHub handle / team before the talk.
+*                       @doytsujin
+/solutions/             @doytsujin
+/deployment-settings/   @doytsujin

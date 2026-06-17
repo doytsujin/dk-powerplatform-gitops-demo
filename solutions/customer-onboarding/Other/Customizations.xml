@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Unpacked solution fragment. The demo edits exactly one line: the env-var value. -->
+<ImportExportXml version="9.2">
+  <EnvironmentVariables>
+    <EnvironmentVariable schemaname="onb_IntakeEndpoint">
+      <displayname>Onboarding Intake Endpoint</displayname>
+      <type>string</type>
+      <!-- seed.sh flips old-endpoint -> new-endpoint to create the demo diff -->
+      <value>https://old-endpoint.contoso.example/api/intake</value>
+    </EnvironmentVariable>
+  </EnvironmentVariables>
+</ImportExportXml>
