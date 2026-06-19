@@ -4,7 +4,9 @@
 # would fail late. Catch it at PR time instead.
 set -euo pipefail
 
-vars=$(grep -rohE 'schemaname="[a-z_]+"' solutions/ | sed -E 's/schemaname="([a-z_]+)"/\1/' | sort -u)
+# schemanames are mixed-case (e.g. onb_IntakeEndpoint); match A-Z/0-9 too, and
+# don't let an empty grep trip `set -o pipefail`.
+vars=$(grep -rohE 'schemaname="[A-Za-z0-9_]+"' solutions/ | sed -E 's/schemaname="([A-Za-z0-9_]+)"/\1/' | sort -u || true)
 status=0
 for f in deployment-settings/dev.json deployment-settings/test.json deployment-settings/prod.json; do
   for v in $vars; do

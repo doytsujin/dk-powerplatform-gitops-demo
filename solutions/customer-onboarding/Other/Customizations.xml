@@ -6,7 +6,7 @@
       <displayname>Onboarding Intake Endpoint</displayname>
       <type>string</type>
       <!-- seed.sh flips old-endpoint -> new-endpoint to create the demo diff -->
-      <value>https://old-endpoint.contoso.example/api/intake</value>
+      <value>https://new-endpoint.contoso.example/api/intake</value>
     </EnvironmentVariable>
   </EnvironmentVariables>
 </ImportExportXml>
